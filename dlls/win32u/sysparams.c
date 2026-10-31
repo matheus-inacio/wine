@@ -7399,6 +7399,54 @@ HBRUSH get_55aa_brush(void)
     return brush_55aa;
 }
 
+BOOL is_dark_theme_enabled(void)
+{
+    static DWORD last_check;
+    static BOOL cached_dark;
+    DWORD now = NtGetTickCount();
+
+    if (!last_check || (now - last_check) > 1000)
+    {
+        char buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(DWORD)];
+        KEY_VALUE_PARTIAL_INFORMATION *value = (void *)buffer;
+        HKEY hkey;
+        DWORD ret = 1;
+
+        if ((hkey = reg_open_hkcu_key( "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize" )))
+        {
+            if (query_reg_ascii_value( hkey, "AppsUseLightTheme", value, sizeof(buffer) ) &&
+                value->Type == REG_DWORD)
+                ret = *(DWORD *)value->Data;
+            NtClose( hkey );
+        }
+        cached_dark = (ret == 0);
+        last_check = now ? now : 1;
+    }
+    return cached_dark;
+}
+
+BOOL is_window_dark_mode( HWND hwnd )
+{
+    static const WCHAR dark_mode_prop[] = {'_','_','w','i','n','e','_','d','w','m','_','d','a','r','k','_','m','o','d','e',0};
+    HANDLE val;
+    if (hwnd && (val = NtUserGetProp( hwnd, dark_mode_prop )))
+        return val == (HANDLE)1;
+    return is_dark_theme_enabled();
+}
+
+COLORREF get_window_border_color( HWND hwnd )
+{
+    static const WCHAR border_color_prop[] = {'_','_','w','i','n','e','_','d','w','m','_','b','o','r','d','e','r','_','c','o','l','o','r',0};
+    HANDLE val;
+    if (hwnd && (val = NtUserGetProp( hwnd, border_color_prop )))
+    {
+        COLORREF color = (COLORREF)((DWORD_PTR)val - 1);
+        if (color != 0xFFFFFFFF && color != 0xFFFFFFFE)
+            return color;
+    }
+    return RGB( 43, 43, 43 );
+}
+
 HBRUSH get_sys_color_brush( unsigned int index )
 {
     if (index == COLOR_55AA_BRUSH) return get_55aa_brush();

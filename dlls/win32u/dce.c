@@ -581,7 +581,10 @@ struct window_surface *window_surface_create( const struct window_surface_funcs 
         struct window_rects win_rects;
         if (!get_window_rects( hwnd, COORDS_WINDOW, &win_rects, get_thread_dpi() ) ||
             !EqualRect( &win_rects.window, &win_rects.client ))
-            memset( window_surface_get_color( surface, info ), 0xff, info->bmiHeader.biSizeImage );
+        {
+            int fill = is_window_dark_mode( hwnd ) ? 0x00 : 0xff;
+            memset( window_surface_get_color( surface, info ), fill, info->bmiHeader.biSizeImage );
+        }
     }
 
     TRACE( "created surface %p for hwnd %p rect %s\n", surface, hwnd, wine_dbgstr_rect( &surface->rect ) );

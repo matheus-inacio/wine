@@ -1090,8 +1090,25 @@ void get_sys_popup_pos( HWND hwnd, RECT *rect )
     }
 }
 
+static int frame_rect( HDC hdc, const RECT *rect, HBRUSH hbrush )
+{
+    HBRUSH prev_brush;
+    RECT r = *rect;
+
+    if (IsRectEmpty(&r)) return 0;
+    if (!(prev_brush = NtGdiSelectBrush( hdc, hbrush ))) return 0;
+
+    NtGdiPatBlt( hdc, r.left, r.top, 1, r.bottom - r.top, PATCOPY );
+    NtGdiPatBlt( hdc, r.right - 1, r.top, 1, r.bottom - r.top, PATCOPY );
+    NtGdiPatBlt( hdc, r.left, r.top, r.right - r.left, 1, PATCOPY );
+    NtGdiPatBlt( hdc, r.left, r.bottom - 1, r.right - r.left, 1, PATCOPY );
+
+    NtGdiSelectBrush( hdc, prev_brush );
+    return TRUE;
+}
+
 /* Draw a window frame inside the given rectangle, and update the rectangle. */
-static void draw_nc_frame( HDC  hdc, RECT  *rect, BOOL  active, DWORD style, DWORD ex_style )
+static void draw_nc_frame( HDC  hdc, RECT  *rect, BOOL  active, DWORD style, DWORD ex_style, BOOL dark )
 {
     INT width, height;
 
@@ -1100,13 +1117,27 @@ static void draw_nc_frame( HDC  hdc, RECT  *rect, BOOL  active, DWORD style, DWO
         width  = get_system_metrics( SM_CXFRAME ) - get_system_metrics( SM_CXDLGFRAME );
         height = get_system_metrics( SM_CYFRAME ) - get_system_metrics( SM_CYDLGFRAME );
 
-        NtGdiSelectBrush( hdc, get_sys_color_brush( active ? COLOR_ACTIVEBORDER :
-                                                    COLOR_INACTIVEBORDER ));
-        /* Draw frame */
-        NtGdiPatBlt( hdc, rect->left, rect->top, rect->right - rect->left, height, PATCOPY );
-        NtGdiPatBlt( hdc, rect->left, rect->top, width, rect->bottom - rect->top, PATCOPY );
-        NtGdiPatBlt( hdc, rect->left, rect->bottom - 1, rect->right - rect->left, -height, PATCOPY );
-        NtGdiPatBlt( hdc, rect->right - 1, rect->top, -width, rect->bottom - rect->top, PATCOPY );
+        if (dark)
+        {
+            HBRUSH dark_brush = NtGdiCreateSolidBrush( RGB(32, 32, 32), 0 );
+            HBRUSH prev_brush = NtGdiSelectBrush( hdc, dark_brush );
+            NtGdiPatBlt( hdc, rect->left, rect->top, rect->right - rect->left, height, PATCOPY );
+            NtGdiPatBlt( hdc, rect->left, rect->top, width, rect->bottom - rect->top, PATCOPY );
+            NtGdiPatBlt( hdc, rect->left, rect->bottom - 1, rect->right - rect->left, -height, PATCOPY );
+            NtGdiPatBlt( hdc, rect->right - 1, rect->top, -width, rect->bottom - rect->top, PATCOPY );
+            NtGdiSelectBrush( hdc, prev_brush );
+            NtGdiDeleteObjectApp( dark_brush );
+        }
+        else
+        {
+            NtGdiSelectBrush( hdc, get_sys_color_brush( active ? COLOR_ACTIVEBORDER :
+                                                        COLOR_INACTIVEBORDER ));
+            /* Draw frame */
+            NtGdiPatBlt( hdc, rect->left, rect->top, rect->right - rect->left, height, PATCOPY );
+            NtGdiPatBlt( hdc, rect->left, rect->top, width, rect->bottom - rect->top, PATCOPY );
+            NtGdiPatBlt( hdc, rect->left, rect->bottom - 1, rect->right - rect->left, -height, PATCOPY );
+            NtGdiPatBlt( hdc, rect->right - 1, rect->top, -width, rect->bottom - rect->top, PATCOPY );
+        }
 
         InflateRect( rect, -width, -height );
     }
@@ -1114,27 +1145,44 @@ static void draw_nc_frame( HDC  hdc, RECT  *rect, BOOL  active, DWORD style, DWO
     /* Now the other bit of the frame */
     if ((style & (WS_BORDER|WS_DLGFRAME)) || (ex_style & WS_EX_DLGMODALFRAME))
     {
-        DWORD color;
-
         width  = get_system_metrics( SM_CXDLGFRAME ) - get_system_metrics( SM_CXEDGE );
         height = get_system_metrics( SM_CYDLGFRAME ) - get_system_metrics( SM_CYEDGE );
         /* This should give a value of 1 that should also work for a border */
 
-        if (ex_style & (WS_EX_DLGMODALFRAME | WS_EX_CLIENTEDGE)) color = COLOR_3DFACE;
-        else if (ex_style & WS_EX_STATICEDGE) color = COLOR_WINDOWFRAME;
-        else if (style & (WS_DLGFRAME|WS_THICKFRAME)) color = COLOR_3DFACE;
-        else color = COLOR_WINDOWFRAME;
-        NtGdiSelectBrush( hdc, get_sys_color_brush( color ));
+        if (dark)
+        {
+            HBRUSH dark_brush = NtGdiCreateSolidBrush( RGB(32, 32, 32), 0 );
+            HBRUSH prev_brush = NtGdiSelectBrush( hdc, dark_brush );
+            NtGdiPatBlt( hdc, rect->left, rect->top,
+                         rect->right - rect->left, height, PATCOPY );
+            NtGdiPatBlt( hdc, rect->left, rect->top,
+                         width, rect->bottom - rect->top, PATCOPY );
+            NtGdiPatBlt( hdc, rect->left, rect->bottom - 1,
+                         rect->right - rect->left, -height, PATCOPY );
+            NtGdiPatBlt( hdc, rect->right - 1, rect->top,
+                         -width, rect->bottom - rect->top, PATCOPY );
+            NtGdiSelectBrush( hdc, prev_brush );
+            NtGdiDeleteObjectApp( dark_brush );
+        }
+        else
+        {
+            DWORD color;
+            if (ex_style & (WS_EX_DLGMODALFRAME | WS_EX_CLIENTEDGE)) color = COLOR_3DFACE;
+            else if (ex_style & WS_EX_STATICEDGE) color = COLOR_WINDOWFRAME;
+            else if (style & (WS_DLGFRAME|WS_THICKFRAME)) color = COLOR_3DFACE;
+            else color = COLOR_WINDOWFRAME;
+            NtGdiSelectBrush( hdc, get_sys_color_brush( color ));
 
-        /* Draw frame */
-        NtGdiPatBlt( hdc, rect->left, rect->top,
-                     rect->right - rect->left, height, PATCOPY );
-        NtGdiPatBlt( hdc, rect->left, rect->top,
-                     width, rect->bottom - rect->top, PATCOPY );
-        NtGdiPatBlt( hdc, rect->left, rect->bottom - 1,
-                     rect->right - rect->left, -height, PATCOPY );
-        NtGdiPatBlt( hdc, rect->right - 1, rect->top,
-                     -width, rect->bottom - rect->top, PATCOPY );
+            /* Draw frame */
+            NtGdiPatBlt( hdc, rect->left, rect->top,
+                         rect->right - rect->left, height, PATCOPY );
+            NtGdiPatBlt( hdc, rect->left, rect->top,
+                         width, rect->bottom - rect->top, PATCOPY );
+            NtGdiPatBlt( hdc, rect->left, rect->bottom - 1,
+                         rect->right - rect->left, -height, PATCOPY );
+            NtGdiPatBlt( hdc, rect->right - 1, rect->top,
+                         -width, rect->bottom - rect->top, PATCOPY );
+        }
 
         InflateRect( rect, -width, -height );
     }
@@ -1335,7 +1383,8 @@ static BOOL draw_frame_caption( HDC dc, RECT *r, UINT flags )
 
     static const WCHAR marlettW[] = {'M','a','r','l','e','t','t',0};
 
-    draw_push_button( dc, r, flags & 0xff00 );
+    if (!(flags & DFCS_TRANSPARENT))
+        draw_push_button( dc, r, flags & 0xff00 );
 
     switch (flags & 0xf)
     {
@@ -1361,13 +1410,28 @@ static BOOL draw_frame_caption( HDC dc, RECT *r, UINT flags )
     prev_font = NtGdiSelectFont( dc, font );
     NtGdiGetTextExtentExW( dc, str, 1, 0, NULL, NULL, &size, 0 );
 
-    if (flags & DFCS_INACTIVE)
+    if (flags & DFCS_TRANSPARENT)
     {
-        NtGdiGetAndSetDCDword( dc, NtGdiSetTextColor, get_sys_color(COLOR_BTNHIGHLIGHT), NULL );
-        NtGdiExtTextOutW( dc, xc-size.cx/2+1, yc-size.cy/2+1, 0, NULL, str, 1, NULL, 0 );
+        COLORREF glyph_color = (flags & DFCS_INACTIVE) ? RGB(100, 100, 100) : RGB(220, 220, 220);
+        if (flags & DFCS_PUSHED)
+        {
+            HBRUSH push_brush = NtGdiCreateSolidBrush( RGB(70, 70, 70), 0 );
+            fill_rect( dc, r, push_brush );
+            NtGdiDeleteObjectApp( push_brush );
+        }
+        NtGdiGetAndSetDCDword( dc, NtGdiSetTextColor, glyph_color, NULL );
+        NtGdiExtTextOutW( dc, xc-size.cx/2, yc-size.cy/2, 0, NULL, str, 1, NULL, 0 );
     }
-    NtGdiGetAndSetDCDword( dc, NtGdiSetTextColor, get_sys_color( color_idx ), NULL );
-    NtGdiExtTextOutW( dc, xc-size.cx/2, yc-size.cy/2, 0, NULL, str, 1, NULL, 0 );
+    else
+    {
+        if (flags & DFCS_INACTIVE)
+        {
+            NtGdiGetAndSetDCDword( dc, NtGdiSetTextColor, get_sys_color(COLOR_BTNHIGHLIGHT), NULL );
+            NtGdiExtTextOutW( dc, xc-size.cx/2+1, yc-size.cy/2+1, 0, NULL, str, 1, NULL, 0 );
+        }
+        NtGdiGetAndSetDCDword( dc, NtGdiSetTextColor, get_sys_color( color_idx ), NULL );
+        NtGdiExtTextOutW( dc, xc-size.cx/2, yc-size.cy/2, 0, NULL, str, 1, NULL, 0 );
+    }
 
     NtGdiSelectFont(dc, prev_font);
     NtGdiGetAndSetDCDword( dc, NtGdiSetTextColor, prev_color, NULL );
@@ -1497,6 +1561,7 @@ static void draw_close_button( HWND hwnd, HDC hdc, BOOL down, BOOL grayed )
 
     if (down) flags |= DFCS_PUSHED;
     if (grayed) flags |= DFCS_INACTIVE;
+    if (is_window_dark_mode( hwnd )) flags |= DFCS_FLAT | DFCS_TRANSPARENT;
     draw_frame_caption( hdc, &rect, flags );
 }
 
@@ -1520,6 +1585,7 @@ static void draw_max_button( HWND hwnd, HDC hdc, BOOL down, BOOL grayed )
     rect.right -= 2;
     if (down) flags |= DFCS_PUSHED;
     if (grayed) flags |= DFCS_INACTIVE;
+    if (is_window_dark_mode( hwnd )) flags |= DFCS_FLAT | DFCS_TRANSPARENT;
     draw_frame_caption( hdc, &rect, flags );
 }
 
@@ -1546,11 +1612,12 @@ static void draw_min_button( HWND hwnd, HDC hdc, BOOL down, BOOL grayed )
     rect.right -= 2;
     if (down) flags |= DFCS_PUSHED;
     if (grayed) flags |= DFCS_INACTIVE;
+    if (is_window_dark_mode( hwnd )) flags |= DFCS_FLAT | DFCS_TRANSPARENT;
     draw_frame_caption( hdc, &rect, flags );
 }
 
 static void draw_nc_caption( HDC hdc, RECT *rect, HWND hwnd, DWORD  style,
-                             DWORD  ex_style, BOOL active )
+                             DWORD  ex_style, BOOL active, BOOL dark )
 {
     RECT  r = *rect;
     WCHAR buffer[256];
@@ -1560,16 +1627,36 @@ static void draw_nc_caption( HDC hdc, RECT *rect, HWND hwnd, DWORD  style,
     UINT pen_color = COLOR_3DFACE;
     int len;
 
-    if ((ex_style & (WS_EX_STATICEDGE|WS_EX_CLIENTEDGE|WS_EX_DLGMODALFRAME)) == WS_EX_STATICEDGE)
-        pen_color = COLOR_WINDOWFRAME;
-    prev_pen = NtGdiSelectPen( hdc, get_sys_color_pen( pen_color ));
-    NtGdiMoveTo( hdc, r.left, r.bottom - 1, NULL );
-    NtGdiLineTo( hdc, r.right, r.bottom - 1 );
-    NtGdiSelectPen( hdc, prev_pen );
-    r.bottom--;
+    if (dark)
+    {
+        COLORREF line_color = RGB(50, 50, 50);
+        COLORREF bg_color = active ? RGB(40, 40, 40) : RGB(32, 32, 32);
+        HPEN line_pen = NtGdiCreatePen( PS_SOLID, 1, line_color, 0 );
+        HBRUSH bg_brush = NtGdiCreateSolidBrush( bg_color, 0 );
 
-    NtUserSystemParametersInfo( SPI_GETGRADIENTCAPTIONS, 0, &gradient, 0 );
-    draw_caption_bar( hdc, &r, style, active, gradient );
+        prev_pen = NtGdiSelectPen( hdc, line_pen );
+        NtGdiMoveTo( hdc, r.left, r.bottom - 1, NULL );
+        NtGdiLineTo( hdc, r.right, r.bottom - 1 );
+        NtGdiSelectPen( hdc, prev_pen );
+        NtGdiDeleteObjectApp( line_pen );
+        r.bottom--;
+
+        fill_rect( hdc, &r, bg_brush );
+        NtGdiDeleteObjectApp( bg_brush );
+    }
+    else
+    {
+        if ((ex_style & (WS_EX_STATICEDGE|WS_EX_CLIENTEDGE|WS_EX_DLGMODALFRAME)) == WS_EX_STATICEDGE)
+            pen_color = COLOR_WINDOWFRAME;
+        prev_pen = NtGdiSelectPen( hdc, get_sys_color_pen( pen_color ));
+        NtGdiMoveTo( hdc, r.left, r.bottom - 1, NULL );
+        NtGdiLineTo( hdc, r.right, r.bottom - 1 );
+        NtGdiSelectPen( hdc, prev_pen );
+        r.bottom--;
+
+        NtUserSystemParametersInfo( SPI_GETGRADIENTCAPTIONS, 0, &gradient, 0 );
+        draw_caption_bar( hdc, &r, style, active, gradient );
+    }
 
     if ((style & WS_SYSMENU) && !(ex_style & WS_EX_TOOLWINDOW))
     {
@@ -1612,7 +1699,9 @@ static void draw_nc_caption( HDC hdc, RECT *rect, HWND hwnd, DWORD  style,
         else
             hFont = NtGdiHfontCreate( &nclm.lfCaptionFont, sizeof(nclm.lfCaptionFont), 0, 0, NULL );
         hOldFont = NtGdiSelectFont( hdc, hFont );
-        if (active)
+        if (dark)
+            NtGdiGetAndSetDCDword( hdc, NtGdiSetTextColor, active ? RGB(240, 240, 240) : RGB(160, 160, 160), NULL );
+        else if (active)
             NtGdiGetAndSetDCDword( hdc, NtGdiSetTextColor, get_sys_color( COLOR_CAPTIONTEXT ), NULL );
         else
             NtGdiGetAndSetDCDword( hdc, NtGdiSetTextColor, get_sys_color( COLOR_INACTIVECAPTIONTEXT ), NULL );
@@ -1726,6 +1815,7 @@ static void nc_paint( HWND hwnd, HRGN clip )
     WORD flags;
     HRGN hrgn;
     RECT rectClient;
+    BOOL dark;
 
     if (!(win = get_win_ptr( hwnd )) || win == WND_OTHER_PROCESS) return;
     style = win->dwStyle;
@@ -1739,7 +1829,9 @@ static void nc_paint( HWND hwnd, HRGN clip )
 
     if (!(style & WS_MINIMIZE))
     {
+        static const WCHAR ext_frame_prop[] = {'_','_','w','i','n','e','_','d','w','m','_','e','x','t','e','n','d','e','d','_','f','r','a','m','e',0};
         struct window_rects win_rects;
+        if (NtUserGetProp( hwnd, ext_frame_prop )) return;
         if (get_window_rects( hwnd, COORDS_SCREEN, &win_rects, get_thread_dpi() ) &&
             EqualRect( &win_rects.window, &win_rects.client ))
             return;
@@ -1768,14 +1860,27 @@ static void nc_paint( HWND hwnd, HRGN clip )
     get_window_rect_rel( hwnd, COORDS_WINDOW, &rect, get_thread_dpi() );
     NtGdiGetAppClipBox( hdc, &clip_rect );
 
-    NtGdiSelectPen( hdc, get_sys_color_pen( COLOR_WINDOWFRAME ));
+    dark = is_window_dark_mode( hwnd );
 
-    if (has_static_outer_frame( ex_style ))
-        draw_rect_edge( hdc, &rect, BDR_SUNKENOUTER, BF_RECT | BF_ADJUST, 1 );
-    else if (has_big_frame( style, ex_style ))
-        draw_rect_edge( hdc, &rect, EDGE_RAISED, BF_RECT | BF_ADJUST, 1 );
+    if (dark)
+    {
+        COLORREF border_color = get_window_border_color( hwnd );
+        HBRUSH brush = NtGdiCreateSolidBrush( border_color, 0 );
+        frame_rect( hdc, &rect, brush );
+        NtGdiDeleteObjectApp( brush );
+        InflateRect( &rect, -1, -1 );
+    }
+    else
+    {
+        NtGdiSelectPen( hdc, get_sys_color_pen( COLOR_WINDOWFRAME ));
 
-    draw_nc_frame( hdc, &rect, active, style, ex_style );
+        if (has_static_outer_frame( ex_style ))
+            draw_rect_edge( hdc, &rect, BDR_SUNKENOUTER, BF_RECT | BF_ADJUST, 1 );
+        else if (has_big_frame( style, ex_style ))
+            draw_rect_edge( hdc, &rect, EDGE_RAISED, BF_RECT | BF_ADJUST, 1 );
+    }
+
+    draw_nc_frame( hdc, &rect, active, style, ex_style, dark );
 
     if ((style & WS_CAPTION) == WS_CAPTION)
     {
@@ -1791,7 +1896,7 @@ static void nc_paint( HWND hwnd, HRGN clip )
         }
 
         if (intersect_rect( &rfuzz, &r, &clip_rect ))
-            draw_nc_caption( hdc, &r, hwnd, style, ex_style, active );
+            draw_nc_caption( hdc, &r, hwnd, style, ex_style, active, dark );
     }
 
     if (has_menu( hwnd, style ))
@@ -1811,7 +1916,18 @@ static void nc_paint( HWND hwnd, HRGN clip )
     TRACE( "rect after menu %s\n", wine_dbgstr_rect( &rect ));
 
     if (ex_style & WS_EX_CLIENTEDGE)
-        draw_rect_edge( hdc, &rect, EDGE_SUNKEN, BF_RECT | BF_ADJUST, 1 );
+    {
+        if (dark)
+        {
+            COLORREF border_color = get_window_border_color( hwnd );
+            HBRUSH brush = NtGdiCreateSolidBrush( border_color, 0 );
+            frame_rect( hdc, &rect, brush );
+            NtGdiDeleteObjectApp( brush );
+            InflateRect( &rect, -1, -1 );
+        }
+        else
+            draw_rect_edge( hdc, &rect, EDGE_SUNKEN, BF_RECT | BF_ADJUST, 1 );
+    }
 
     /* Draw the scroll-bars */
     draw_nc_scrollbar( hwnd, hdc, style & WS_HSCROLL, style & WS_VSCROLL );
@@ -1825,7 +1941,7 @@ static void nc_paint( HWND hwnd, HRGN clip )
         else
             r.left = r.right - get_system_metrics( SM_CXVSCROLL ) + 1;
         r.top  = r.bottom - get_system_metrics( SM_CYHSCROLL ) + 1;
-        fill_rect( hdc, &r, get_sys_color_brush( COLOR_BTNFACE ) );
+        fill_rect( hdc, &r, get_sys_color_brush( dark ? COLOR_WINDOW : COLOR_BTNFACE ) );
     }
 
     NtUserReleaseDC( hwnd, hdc );
