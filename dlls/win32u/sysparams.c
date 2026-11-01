@@ -7434,6 +7434,15 @@ BOOL is_window_dark_mode( HWND hwnd )
     return is_dark_theme_enabled();
 }
 
+BOOL is_window_blur_behind( HWND hwnd )
+{
+    static const WCHAR blur_behind_prop[] = {'_','_','w','i','n','e','_','d','w','m','_','b','l','u','r','_','b','e','h','i','n','d',0};
+    HANDLE val;
+    if (hwnd && (val = NtUserGetProp( hwnd, blur_behind_prop )))
+        return val == (HANDLE)1;
+    return FALSE;
+}
+
 COLORREF get_window_border_color( HWND hwnd )
 {
     static const WCHAR border_color_prop[] = {'_','_','w','i','n','e','_','d','w','m','_','b','o','r','d','e','r','_','c','o','l','o','r',0};

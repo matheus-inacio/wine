@@ -164,6 +164,7 @@ extern BOOL emulate_modeset;
 extern BOOL decorated_mode;
 extern BOOL is_dark_theme_enabled(void);
 extern BOOL is_window_dark_mode( HWND hwnd );
+extern BOOL is_window_blur_behind( HWND hwnd );
 extern COLORREF get_window_border_color( HWND hwnd );
 extern UINT64 thunk_lock_callback;
 extern HBRUSH get_55aa_brush(void);

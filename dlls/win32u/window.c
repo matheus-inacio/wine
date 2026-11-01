@@ -2232,7 +2232,7 @@ static BOOL get_default_window_surface( HWND hwnd, const RECT *surface_rect, str
 static struct window_surface *get_window_surface( HWND hwnd, UINT swp_flags, BOOL create_layered,
                                                   struct window_rects *rects, RECT *surface_rect )
 {
-    BOOL shaped, needs_surface, create_opaque, is_layered, is_child;
+    BOOL shaped, needs_surface, create_opaque, is_layered, is_child, blur_behind;
     HWND parent = NtUserGetAncestor( hwnd, GA_PARENT );
     struct window_surface *new_surface;
     struct window_rects monitor_rects;
@@ -2265,8 +2265,9 @@ static struct window_surface *get_window_surface( HWND hwnd, UINT swp_flags, BOO
     if (!get_surface_rect( &rects->visible, surface_rect )) needs_surface = FALSE;
     if (!get_default_window_surface( hwnd, surface_rect, &new_surface )) return NULL;
 
-    is_layered = new_surface && new_surface->alpha_mask;
-    create_opaque = !(get_window_long( hwnd, GWL_EXSTYLE ) & WS_EX_LAYERED);
+    blur_behind = is_window_blur_behind( hwnd );
+    is_layered = (new_surface && new_surface->alpha_mask) || blur_behind;
+    create_opaque = !(get_window_long( hwnd, GWL_EXSTYLE ) & WS_EX_LAYERED) && !blur_behind;
 
     if ((create_opaque && is_layered) || (create_layered && !is_layered))
     {

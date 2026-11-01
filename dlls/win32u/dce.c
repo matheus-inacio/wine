@@ -576,7 +576,7 @@ struct window_surface *window_surface_create( const struct window_surface_funcs 
 
     pthread_mutex_init( &surface->mutex, NULL );
 
-    if (hwnd && get_class_long_ptr( hwnd, GCLP_HBRBACKGROUND, FALSE ))
+    if (hwnd && !is_window_blur_behind( hwnd ) && get_class_long_ptr( hwnd, GCLP_HBRBACKGROUND, FALSE ))
     {
         struct window_rects win_rects;
         if (!get_window_rects( hwnd, COORDS_WINDOW, &win_rects, get_thread_dpi() ) ||

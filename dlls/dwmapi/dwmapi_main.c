@@ -223,9 +223,24 @@ HRESULT WINAPI DwmGetGraphicsStreamTransformHint(UINT uIndex, MilMatrix3x2D *pTr
  */
 HRESULT WINAPI DwmEnableBlurBehindWindow(HWND hWnd, const DWM_BLURBEHIND *pBlurBuf)
 {
-    FIXME("%p %p\n", hWnd, pBlurBuf);
+    BOOL enabled = FALSE;
 
-    return E_NOTIMPL;
+    TRACE("%p %p\n", hWnd, pBlurBuf);
+
+    if (!pBlurBuf) return E_INVALIDARG;
+    if (DwmIsCompositionEnabled(&enabled) == S_OK && !enabled)
+        return DWM_E_COMPOSITIONDISABLED;
+
+    if (pBlurBuf->dwFlags & DWM_BB_ENABLE)
+    {
+        if (pBlurBuf->fEnable)
+            SetPropW( hWnd, L"__wine_dwm_blur_behind", (HANDLE)1 );
+        else
+            RemovePropW( hWnd, L"__wine_dwm_blur_behind" );
+        SetWindowPos( hWnd, 0, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE );
+    }
+
+    return S_OK;
 }
 
 /**********************************************************************
@@ -337,6 +352,14 @@ HRESULT WINAPI DwmGetWindowAttribute(HWND hwnd, DWORD attribute, PVOID pv_attrib
         val = GetPropW( hwnd, L"__wine_dwm_text_color" );
         if (val) *(COLORREF *)pv_attribute = (COLORREF)((DWORD_PTR)val - 1);
         else *(COLORREF *)pv_attribute = 0xFFFFFFFF;
+        hr = S_OK;
+        break;
+    }
+    case DWMWA_CLOAKED:
+    {
+        if (!pv_attribute) return E_INVALIDARG;
+        if (size < sizeof(DWORD)) return E_NOT_SUFFICIENT_BUFFER;
+        *(DWORD *)pv_attribute = 0;
         hr = S_OK;
         break;
     }

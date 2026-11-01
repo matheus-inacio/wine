@@ -1831,6 +1831,7 @@ static void nc_paint( HWND hwnd, HRGN clip )
     {
         static const WCHAR ext_frame_prop[] = {'_','_','w','i','n','e','_','d','w','m','_','e','x','t','e','n','d','e','d','_','f','r','a','m','e',0};
         struct window_rects win_rects;
+        if (is_window_blur_behind( hwnd )) return;
         if (NtUserGetProp( hwnd, ext_frame_prop )) return;
         if (get_window_rects( hwnd, COORDS_SCREEN, &win_rects, get_thread_dpi() ) &&
             EqualRect( &win_rects.window, &win_rects.client ))

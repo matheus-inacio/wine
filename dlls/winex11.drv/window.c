@@ -2424,7 +2424,7 @@ static void create_whole_window( struct x11drv_win_data *data )
     WCHAR text[1024];
     COLORREF key;
     BYTE alpha;
-    DWORD layered_flags;
+    DWORD layered_flags, style, ex_style;
     HRGN win_rgn;
     POINT pos;
 
@@ -2435,6 +2435,19 @@ static void create_whole_window( struct x11drv_win_data *data )
         win_rgn = 0;
     }
     data->shaped = (win_rgn != 0);
+
+    if (argb_visual.visualid)
+    {
+        static const WCHAR blur_behind_prop[] = {'_','_','w','i','n','e','_','d','w','m','_','b','l','u','r','_','b','e','h','i','n','d',0};
+        style = NtUserGetWindowLongW( data->hwnd, GWL_STYLE );
+        ex_style = NtUserGetWindowLongW( data->hwnd, GWL_EXSTYLE );
+        if (NtUserGetProp( data->hwnd, blur_behind_prop ) ||
+            ((style & WS_POPUP) && (ex_style & WS_EX_TOOLWINDOW)))
+        {
+            data->vis = argb_visual;
+            data->use_alpha = TRUE;
+        }
+    }
 
     if (data->vis.visualid != default_visual.visualid)
         data->whole_colormap = XCreateColormap( data->display, root_window, data->vis.visual, AllocNone );
