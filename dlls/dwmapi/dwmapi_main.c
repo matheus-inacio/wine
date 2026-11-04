@@ -68,7 +68,16 @@ HRESULT WINAPI DwmEnableComposition(UINT uCompositionAction)
  */
 HRESULT WINAPI DwmExtendFrameIntoClientArea(HWND hwnd, const MARGINS* margins)
 {
-    FIXME("(%p, %p) stub\n", hwnd, margins);
+    TRACE("(%p, %p)\n", hwnd, margins);
+
+    if (!IsWindow(hwnd)) return E_HANDLE;
+
+    if (margins && (margins->cxLeftWidth != 0 || margins->cxRightWidth != 0 ||
+                    margins->cyTopHeight != 0 || margins->cyBottomHeight != 0 ||
+                    margins->cxLeftWidth == -1))
+        SetPropW( hwnd, L"__wine_dwm_extended_frame", (HANDLE)1 );
+    else
+        RemovePropW( hwnd, L"__wine_dwm_extended_frame" );
 
     return S_OK;
 }
@@ -100,11 +109,63 @@ HRESULT WINAPI DwmInvalidateIconicBitmaps(HWND hwnd)
  */
 HRESULT WINAPI DwmSetWindowAttribute(HWND hwnd, DWORD attributenum, LPCVOID attribute, DWORD size)
 {
-    static BOOL once;
+    TRACE("(%p, %lx, %p, %lx)\n", hwnd, attributenum, attribute, size);
 
-    if (!once++) FIXME("(%p, %lx, %p, %lx) stub\n", hwnd, attributenum, attribute, size);
+    if (!IsWindow(hwnd)) return E_HANDLE;
+    if (!attribute) return E_INVALIDARG;
 
-    return S_OK;
+    switch (attributenum)
+    {
+    case 19:
+    case DWMWA_USE_IMMERSIVE_DARK_MODE:
+    {
+        BOOL dark;
+        if (size < sizeof(BOOL)) return E_INVALIDARG;
+        dark = *(const BOOL *)attribute;
+        TRACE("hwnd %p, dark mode %d\n", hwnd, dark);
+        if (dark)
+            SetPropW( hwnd, L"__wine_dwm_dark_mode", (HANDLE)1 );
+        else
+            SetPropW( hwnd, L"__wine_dwm_dark_mode", (HANDLE)2 );
+        SetWindowPos( hwnd, 0, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE );
+        return S_OK;
+    }
+    case DWMWA_WINDOW_CORNER_PREFERENCE:
+        TRACE("hwnd %p, corner preference %ld\n", hwnd, *(const DWORD *)attribute);
+        return S_OK;
+
+    case DWMWA_BORDER_COLOR:
+    {
+        COLORREF color;
+        if (size < sizeof(COLORREF)) return E_INVALIDARG;
+        color = *(const COLORREF *)attribute;
+        TRACE("hwnd %p, border color %#lx\n", hwnd, color);
+        SetPropW( hwnd, L"__wine_dwm_border_color", (HANDLE)(DWORD_PTR)(color + 1) );
+        SetWindowPos( hwnd, 0, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE );
+        return S_OK;
+    }
+    case DWMWA_CAPTION_COLOR:
+    {
+        COLORREF color;
+        if (size < sizeof(COLORREF)) return E_INVALIDARG;
+        color = *(const COLORREF *)attribute;
+        SetPropW( hwnd, L"__wine_dwm_caption_color", (HANDLE)(DWORD_PTR)(color + 1) );
+        SetWindowPos( hwnd, 0, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE );
+        return S_OK;
+    }
+    case DWMWA_TEXT_COLOR:
+    {
+        COLORREF color;
+        if (size < sizeof(COLORREF)) return E_INVALIDARG;
+        color = *(const COLORREF *)attribute;
+        SetPropW( hwnd, L"__wine_dwm_text_color", (HANDLE)(DWORD_PTR)(color + 1) );
+        SetWindowPos( hwnd, 0, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE );
+        return S_OK;
+    }
+    default:
+        FIXME("(%p, %lx, %p, %lx) stub\n", hwnd, attributenum, attribute, size);
+        return S_OK;
+    }
 }
 
 /**********************************************************************
@@ -162,9 +223,24 @@ HRESULT WINAPI DwmGetGraphicsStreamTransformHint(UINT uIndex, MilMatrix3x2D *pTr
  */
 HRESULT WINAPI DwmEnableBlurBehindWindow(HWND hWnd, const DWM_BLURBEHIND *pBlurBuf)
 {
-    FIXME("%p %p\n", hWnd, pBlurBuf);
+    BOOL enabled = FALSE;
 
-    return E_NOTIMPL;
+    TRACE("%p %p\n", hWnd, pBlurBuf);
+
+    if (!pBlurBuf) return E_INVALIDARG;
+    if (DwmIsCompositionEnabled(&enabled) == S_OK && !enabled)
+        return DWM_E_COMPOSITIONDISABLED;
+
+    if (pBlurBuf->dwFlags & DWM_BB_ENABLE)
+    {
+        if (pBlurBuf->fEnable)
+            SetPropW( hWnd, L"__wine_dwm_blur_behind", (HANDLE)1 );
+        else
+            RemovePropW( hWnd, L"__wine_dwm_blur_behind" );
+        SetWindowPos( hWnd, 0, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE );
+    }
+
+    return S_OK;
 }
 
 /**********************************************************************
@@ -172,9 +248,26 @@ HRESULT WINAPI DwmEnableBlurBehindWindow(HWND hWnd, const DWM_BLURBEHIND *pBlurB
  */
 BOOL WINAPI DwmDefWindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, LRESULT *plResult)
 {
-    static int i;
+    BOOL enabled = FALSE;
 
-    if (!i++) FIXME("stub\n");
+    TRACE("(%p, %#x, %Ix, %Ix, %p)\n", hWnd, Msg, wParam, lParam, plResult);
+
+    if (DwmIsCompositionEnabled(&enabled) == S_OK && !enabled)
+        return FALSE;
+
+    switch (Msg)
+    {
+    case WM_NCACTIVATE:
+        if (plResult) *plResult = DefWindowProcW(hWnd, Msg, wParam, -1);
+        return TRUE;
+
+    case WM_NCPAINT:
+        if (plResult) *plResult = 0;
+        return TRUE;
+
+    default:
+        break;
+    }
 
     return FALSE;
 }
@@ -215,6 +308,59 @@ HRESULT WINAPI DwmGetWindowAttribute(HWND hwnd, DWORD attribute, PVOID pv_attrib
             hr = HRESULT_FROM_WIN32(GetLastError());
 
         SetThreadDpiAwarenessContext(context);
+        break;
+    }
+    case 19:
+    case DWMWA_USE_IMMERSIVE_DARK_MODE:
+    {
+        HANDLE val;
+        if (!pv_attribute) return E_INVALIDARG;
+        if (size < sizeof(BOOL)) return E_NOT_SUFFICIENT_BUFFER;
+        val = GetPropW( hwnd, L"__wine_dwm_dark_mode" );
+        if (val) *(BOOL *)pv_attribute = (val == (HANDLE)1);
+        else *(BOOL *)pv_attribute = FALSE;
+        hr = S_OK;
+        break;
+    }
+    case DWMWA_BORDER_COLOR:
+    {
+        HANDLE val;
+        if (!pv_attribute) return E_INVALIDARG;
+        if (size < sizeof(COLORREF)) return E_NOT_SUFFICIENT_BUFFER;
+        val = GetPropW( hwnd, L"__wine_dwm_border_color" );
+        if (val) *(COLORREF *)pv_attribute = (COLORREF)((DWORD_PTR)val - 1);
+        else *(COLORREF *)pv_attribute = 0xFFFFFFFF;
+        hr = S_OK;
+        break;
+    }
+    case DWMWA_CAPTION_COLOR:
+    {
+        HANDLE val;
+        if (!pv_attribute) return E_INVALIDARG;
+        if (size < sizeof(COLORREF)) return E_NOT_SUFFICIENT_BUFFER;
+        val = GetPropW( hwnd, L"__wine_dwm_caption_color" );
+        if (val) *(COLORREF *)pv_attribute = (COLORREF)((DWORD_PTR)val - 1);
+        else *(COLORREF *)pv_attribute = 0xFFFFFFFF;
+        hr = S_OK;
+        break;
+    }
+    case DWMWA_TEXT_COLOR:
+    {
+        HANDLE val;
+        if (!pv_attribute) return E_INVALIDARG;
+        if (size < sizeof(COLORREF)) return E_NOT_SUFFICIENT_BUFFER;
+        val = GetPropW( hwnd, L"__wine_dwm_text_color" );
+        if (val) *(COLORREF *)pv_attribute = (COLORREF)((DWORD_PTR)val - 1);
+        else *(COLORREF *)pv_attribute = 0xFFFFFFFF;
+        hr = S_OK;
+        break;
+    }
+    case DWMWA_CLOAKED:
+    {
+        if (!pv_attribute) return E_INVALIDARG;
+        if (size < sizeof(DWORD)) return E_NOT_SUFFICIENT_BUFFER;
+        *(DWORD *)pv_attribute = 0;
+        hr = S_OK;
         break;
     }
     default:

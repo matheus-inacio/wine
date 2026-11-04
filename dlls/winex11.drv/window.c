@@ -2383,6 +2383,7 @@ Window create_client_window( HWND hwnd, RECT client_rect, const XVisualInfo *vis
     attr.win_gravity = NorthWestGravity;
     attr.backing_store = NotUseful;
     attr.border_pixel = 0;
+    attr.background_pixel = 0;
 
     x = client_rect.left;
     y = client_rect.top;
@@ -2394,7 +2395,7 @@ Window create_client_window( HWND hwnd, RECT client_rect, const XVisualInfo *vis
                                                data->whole_window ? data->whole_window : get_dummy_parent(),
                                                x, y, cx, cy, 0, visual->depth, InputOutput,
                                                visual->visual, CWBitGravity | CWWinGravity |
-                                               CWBackingStore | CWColormap | CWBorderPixel, &attr );
+                                               CWBackingStore | CWColormap | CWBorderPixel | CWBackPixel, &attr );
     if (data->client_window)
     {
         XMapWindow( gdi_display, data->client_window );
@@ -2423,7 +2424,7 @@ static void create_whole_window( struct x11drv_win_data *data )
     WCHAR text[1024];
     COLORREF key;
     BYTE alpha;
-    DWORD layered_flags;
+    DWORD layered_flags, style, ex_style;
     HRGN win_rgn;
     POINT pos;
 
@@ -2434,6 +2435,19 @@ static void create_whole_window( struct x11drv_win_data *data )
         win_rgn = 0;
     }
     data->shaped = (win_rgn != 0);
+
+    if (argb_visual.visualid)
+    {
+        static const WCHAR blur_behind_prop[] = {'_','_','w','i','n','e','_','d','w','m','_','b','l','u','r','_','b','e','h','i','n','d',0};
+        style = NtUserGetWindowLongW( data->hwnd, GWL_STYLE );
+        ex_style = NtUserGetWindowLongW( data->hwnd, GWL_EXSTYLE );
+        if (NtUserGetProp( data->hwnd, blur_behind_prop ) ||
+            ((style & WS_POPUP) && (ex_style & WS_EX_TOOLWINDOW)))
+        {
+            data->vis = argb_visual;
+            data->use_alpha = TRUE;
+        }
+    }
 
     if (data->vis.visualid != default_visual.visualid)
         data->whole_colormap = XCreateColormap( data->display, root_window, data->vis.visual, AllocNone );

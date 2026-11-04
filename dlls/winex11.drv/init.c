@@ -312,7 +312,7 @@ static void client_surface_update_geometry( HWND hwnd, struct x11drv_client_surf
 
 static void client_surface_update_offscreen( HWND hwnd, struct x11drv_client_surface *surface )
 {
-    BOOL offscreen = needs_offscreen_rendering( hwnd, surface->client.raw );
+    BOOL offscreen = surface->client.offscreen || needs_offscreen_rendering( hwnd, surface->client.raw );
     struct x11drv_win_data *data;
 
     if (InterlockedExchange( &surface->client.offscreen, offscreen ) == offscreen)

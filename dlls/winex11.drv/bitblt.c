@@ -1982,7 +1982,7 @@ BOOL X11DRV_CreateWindowSurface( HWND hwnd, BOOL layered, const RECT *surface_re
     }
     if (previous) window_surface_release( previous );
 
-    if (layered)
+    if (layered || data->use_alpha)
     {
         data->layered = TRUE;
         if (!data->embedded && argb_visual.visualid) set_window_visual( data, &argb_visual, TRUE );
@@ -1994,7 +1994,7 @@ BOOL X11DRV_CreateWindowSurface( HWND hwnd, BOOL layered, const RECT *surface_re
     }
 
     *surface = create_surface( data->hwnd, data->whole_window, &data->vis, surface_rect,
-                               layered ? data->use_alpha : FALSE );
+                               (layered || data->use_alpha) ? data->use_alpha : FALSE );
 
 done:
     release_win_data( data );
